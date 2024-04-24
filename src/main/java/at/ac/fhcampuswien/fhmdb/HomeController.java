@@ -4,6 +4,7 @@ import at.ac.fhcampuswien.fhmdb.api.MovieAPI;
 import at.ac.fhcampuswien.fhmdb.models.Genre;
 import at.ac.fhcampuswien.fhmdb.models.Movie;
 import at.ac.fhcampuswien.fhmdb.models.SortedState;
+import at.ac.fhcampuswien.fhmdb.models.WindowState;
 import at.ac.fhcampuswien.fhmdb.ui.MovieCell;
 import com.jfoenix.controls.JFXButton;
 import com.jfoenix.controls.JFXComboBox;
@@ -48,6 +49,11 @@ public class HomeController implements Initializable {
 
     protected SortedState sortedState;
 
+    protected WindowState windowState;
+
+    @FXML
+    public JFXButton windowBtn;
+
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
         initializeState();
@@ -59,6 +65,7 @@ public class HomeController implements Initializable {
         setMovies(result);
         setMovieList(result);
         sortedState = SortedState.NONE;
+        windowState = WindowState.HOME;
 
         // test stream methods
         System.out.println("getMostPopularActor");
@@ -209,6 +216,24 @@ public class HomeController implements Initializable {
 
     public void sortBtnClicked(ActionEvent actionEvent) {
         sortMovies();
+    }
+
+    public void windowBtnClicked(ActionEvent actionEvent) {
+        if(windowState == WindowState.HOME){
+            List<Movie> result = MovieAPI.getAllMovies();
+            setMovies(result);
+            setMovieList(result);
+            sortedState = SortedState.NONE;
+            windowState = WindowState.WATCHLIST;
+            windowBtn.setText("Go back Home");
+        } else {
+            List<Movie> result = MovieAPI.getAllMovies();
+            setMovies(result);
+            setMovieList(result);
+            sortedState = SortedState.NONE;
+            windowState = WindowState.HOME;
+            windowBtn.setText("Go to Watchlist");
+        }
     }
 
     // count which actor is in the most movies
