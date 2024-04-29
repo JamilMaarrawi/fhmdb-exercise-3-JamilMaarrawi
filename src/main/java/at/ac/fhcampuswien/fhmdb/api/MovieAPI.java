@@ -5,6 +5,7 @@ import at.ac.fhcampuswien.fhmdb.models.Movie;
 import okhttp3.*;
 import com.google.gson.Gson;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -15,7 +16,7 @@ public class MovieAPI {
     private static final String URL = "http://prog2.fh-campuswien.ac.at/movies"; // https if certificates work
     private static final OkHttpClient client = new OkHttpClient();
 
-    private String buildUrl(UUID id) {
+    private static String buildUrl(UUID id) {
         StringBuilder url = new StringBuilder(URL);
         if (id != null) {
             url.append("/").append(id);
@@ -73,19 +74,37 @@ public class MovieAPI {
         return new ArrayList<>();
     }
 
-    public Movie requestMovieById(UUID id){
+    public static Movie requestMovieById(UUID id){
         String url = buildUrl(id);
         Request request = new Request.Builder()
                 .url(url)
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", "http.agent")  // needed for the server to accept the request
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
             Gson gson = new Gson();
             return gson.fromJson(response.body().string(), Movie.class);
         } catch (Exception e) {
-            System.err.println(this.getClass() + ": http status not ok");
+            //System.err.println(this.getClass() + ": http status not ok");
+            e.printStackTrace();
         }
 
         return null;
+    }
+
+    public static boolean isRequestSuccessful() {
+        Request request = new Request.Builder()
+                .url(URL)
+                .removeHeader("User-Agent")
+                .addHeader("User-Agent", "http.agent")
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            return response.isSuccessful();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 }

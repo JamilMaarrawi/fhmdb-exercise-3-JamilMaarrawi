@@ -1,10 +1,10 @@
 package at.ac.fhcampuswien.fhmdb;
 
 import at.ac.fhcampuswien.fhmdb.api.MovieAPI;
-import at.ac.fhcampuswien.fhmdb.models.Genre;
-import at.ac.fhcampuswien.fhmdb.models.Movie;
-import at.ac.fhcampuswien.fhmdb.models.SortedState;
-import at.ac.fhcampuswien.fhmdb.models.WindowState;
+import at.ac.fhcampuswien.fhmdb.database.DatabaseManager;
+import at.ac.fhcampuswien.fhmdb.database.MovieRepository;
+import at.ac.fhcampuswien.fhmdb.database.WatchlistRepository;
+import at.ac.fhcampuswien.fhmdb.models.*;
 import at.ac.fhcampuswien.fhmdb.ui.MovieCell;
 import com.jfoenix.controls.JFXButton;
 import com.jfoenix.controls.JFXComboBox;
@@ -17,6 +17,7 @@ import javafx.fxml.Initializable;
 import javafx.scene.control.TextField;
 
 import java.net.URL;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -43,27 +44,50 @@ public class HomeController implements Initializable {
     @FXML
     public JFXButton sortBtn;
 
+    @FXML
+    public JFXButton unFilterBtn;
+
     public List<Movie> allMovies;
 
     protected ObservableList<Movie> observableMovies = FXCollections.observableArrayList();
 
     protected SortedState sortedState;
 
-    protected WindowState windowState;
+    public WindowState windowState;
 
     @FXML
     public JFXButton windowBtn;
 
+    private MovieRepository movieRepository;
+    private WatchlistRepository watchlistRepository;
+
     @Override
     public void initialize(URL url, ResourceBundle resourceBundle) {
-        initializeState();
+        movieRepository = new MovieRepository();
+        watchlistRepository = new WatchlistRepository();
+        try {
+            DatabaseManager.createConnectSource();
+            initializeState();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         initializeLayout();
     }
 
-    public void initializeState() {
-        List<Movie> result = MovieAPI.getAllMovies();
+    public void initializeState() throws SQLException {
+        if(MovieAPI.isRequestSuccessful()){
+            movieRepository.removeAll();
+            movieRepository.addAllMovies(MovieAPI.getAllMovies());
+        }
+        //List<Movie> result = MovieAPI.getAllMovies();
+        List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
         setMovies(result);
         setMovieList(result);
+
+
+        //printMovie(result.get(0));
+        //printMovie(MovieEntity.toMovies(MovieEntity.fromMovies(result)).get(0));
+
         sortedState = SortedState.NONE;
         windowState = WindowState.HOME;
 
@@ -88,7 +112,7 @@ public class HomeController implements Initializable {
 
     public void initializeLayout() {
         movieListView.setItems(observableMovies);   // set the items of the listview to the observable list
-        movieListView.setCellFactory(movieListView -> new MovieCell()); // apply custom cells to the listview
+        movieListView.setCellFactory(movieListView -> new MovieCell(onAddToWatchlistClicked,this)); // apply custom cells to the listview
 
         // genre combobox
         Object[] genres = Genre.values();   // get all genres
@@ -117,6 +141,16 @@ public class HomeController implements Initializable {
         ratingFromComboBox.setPromptText("Filter by Rating");
     }
 
+    private final ClickEventHandler onAddToWatchlistClicked = (clickedItem) -> {
+        if(windowState == WindowState.HOME) watchlistRepository.addToWatchlist(new WatchlistMovieEntity((Movie) clickedItem));
+        else {
+            watchlistRepository.removeFromWatchlist(clickedItem.toString());
+            List<Movie> result =WatchlistMovieEntity.watchlistToMovies(watchlistRepository.getWatchlist());
+            setMovies(result);
+            setMovieList(result);
+        }
+    };
+
     public void setMovies(List<Movie> movies) {
         allMovies = movies;
     }
@@ -135,7 +169,7 @@ public class HomeController implements Initializable {
     }
     // sort movies based on sortedState
     // by default sorted state is NONE
-    // afterwards it switches between ascending and descending
+    // afterward it switches between ascending and descending
     public void sortMovies(SortedState sortDirection) {
         if (sortDirection == SortedState.ASCENDING) {
             observableMovies.sort(Comparator.comparing(Movie::getTitle));
@@ -169,7 +203,27 @@ public class HomeController implements Initializable {
         return movies.stream().filter(movie -> movie.getGenres().contains(genre)).toList();
     }
 
-    public void applyAllFilters(String searchQuery, Object genre) {
+    public List<Movie> filterByReleaseYear(List<Movie> movies, String releaseYear){
+        if(releaseYear == null || Integer.valueOf(releaseYear) > 2023 || Integer.valueOf(releaseYear) < 1900) return movies;
+
+        if(movies == null) {
+            throw new IllegalArgumentException("movies must not be null");
+        }
+
+        return movies.stream().filter(movie -> movie.getReleaseYear() == Integer.valueOf(releaseYear)).toList();
+    }
+
+    public List<Movie> filterByRating(List<Movie> movies, String ratingFrom){
+        if(ratingFrom == null || Integer.valueOf(ratingFrom) > 10 || Integer.valueOf(ratingFrom) < 0) return movies;
+
+        if(movies == null) {
+            throw new IllegalArgumentException("movies must not be null");
+        }
+
+        return movies.stream().filter(movie -> movie.getRating() >= Integer.valueOf(ratingFrom)).toList();
+    }
+
+    public List<Movie> applyAllFilters(String searchQuery, Object genre, Object releaseYear, Object ratingFrom) {
         List<Movie> filteredMovies = allMovies;
 
         if (!searchQuery.isEmpty()) {
@@ -180,8 +234,16 @@ public class HomeController implements Initializable {
             filteredMovies = filterByGenre(filteredMovies, Genre.valueOf(genre.toString()));
         }
 
-        observableMovies.clear();
-        observableMovies.addAll(filteredMovies);
+        if (releaseYear != null ) {
+            filteredMovies = filterByReleaseYear(filteredMovies,releaseYear.toString());
+        }
+
+        if (ratingFrom != null) {
+            filteredMovies = filterByRating(filteredMovies,ratingFrom.toString());
+        }
+
+
+        return filteredMovies;
     }
 
     public void searchBtnClicked(ActionEvent actionEvent) {
@@ -195,10 +257,10 @@ public class HomeController implements Initializable {
             genre = Genre.valueOf(genreValue);
         }
 
-        List<Movie> movies = getMovies(searchQuery, genre, releaseYear, ratingFrom);
+        //List<Movie> movies = getMovies(searchQuery, genre, releaseYear, ratingFrom);
+        List<Movie> movies = applyAllFilters(searchQuery, genre, releaseYear, ratingFrom);
         setMovies(movies);
         setMovieList(movies);
-        // applyAllFilters(searchQuery, genre);
 
         sortMovies(sortedState);
     }
@@ -218,22 +280,32 @@ public class HomeController implements Initializable {
         sortMovies();
     }
 
-    public void windowBtnClicked(ActionEvent actionEvent) {
+    public void windowBtnClicked(ActionEvent actionEvent) throws SQLException {
         if(windowState == WindowState.HOME){
-            List<Movie> result = MovieAPI.getAllMovies();
-            setMovies(result);
-            setMovieList(result);
-            sortedState = SortedState.NONE;
             windowState = WindowState.WATCHLIST;
             windowBtn.setText("Go back Home");
-        } else {
-            List<Movie> result = MovieAPI.getAllMovies();
+            List<Movie> result =WatchlistMovieEntity.watchlistToMovies(watchlistRepository.getWatchlist());
             setMovies(result);
             setMovieList(result);
-            sortedState = SortedState.NONE;
+            initializeLayout();
+        } else {
             windowState = WindowState.HOME;
             windowBtn.setText("Go to Watchlist");
+            List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
+            setMovies(result);
+            setMovieList(result);
+            initializeLayout();
         }
+    }
+
+    public void unFilterBtnClicked(ActionEvent actionEvent) throws SQLException {
+        searchField.setText(null);
+        genreComboBox.setValue(null);
+        releaseYearComboBox.setValue(null);
+        ratingFromComboBox.setValue(null);
+        List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
+        setMovies(result);
+        setMovieList(result);
     }
 
     // count which actor is in the most movies
@@ -267,5 +339,19 @@ public class HomeController implements Initializable {
         return movies.stream()
                 .filter(movie -> movie.getReleaseYear() >= startYear && movie.getReleaseYear() <= endYear)
                 .collect(Collectors.toList());
+    }
+
+    public void printMovie(Movie m){
+        System.out.println(m.getId());
+        System.out.println(m.getTitle());
+        System.out.println(m.getDescription());
+        System.out.println(m.getGenres());
+        System.out.println(m.getReleaseYear());
+        System.out.println(m.getImgUrl());
+        System.out.println(m.getLengthInMinutes());
+        System.out.println(m.getDirectors());
+        System.out.println(m.getWriters());
+        System.out.println(m.getMainCast());
+        System.out.println(m.getRating());
     }
 }
