@@ -1,11 +1,13 @@
 package at.ac.fhcampuswien.fhmdb.api;
 
+import at.ac.fhcampuswien.fhmdb.exceptions.MovieAPIException;
 import at.ac.fhcampuswien.fhmdb.models.Genre;
 import at.ac.fhcampuswien.fhmdb.models.Movie;
 import okhttp3.*;
 import com.google.gson.Gson;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -50,8 +52,10 @@ public class MovieAPI {
         return url.toString();
     }
 
-    public static List<Movie> getAllMovies() {
-        return getAllMovies(null, null, null, null);
+    public static List<Movie> getAllMovies() throws MovieAPIException {
+        List<Movie> movies = getAllMovies(null,null,null,null);
+        if (movies.isEmpty()) throw new MovieAPIException(new RuntimeException());
+        return movies;
     }
 
     public static List<Movie> getAllMovies(String query, Genre genre, String releaseYear, String ratingFrom){
@@ -68,8 +72,8 @@ public class MovieAPI {
             Movie[] movies = gson.fromJson(responseBody, Movie[].class);
 
             return Arrays.asList(movies);
-        } catch (Exception e) {
-            System.err.println(e.getMessage());
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
         }
         return new ArrayList<>();
     }
@@ -85,9 +89,8 @@ public class MovieAPI {
         try (Response response = client.newCall(request).execute()) {
             Gson gson = new Gson();
             return gson.fromJson(response.body().string(), Movie.class);
-        } catch (Exception e) {
-            //System.err.println(this.getClass() + ": http status not ok");
-            e.printStackTrace();
+        } catch (IOException e) {
+            System.err.println(MovieAPI.class + ": http status not ok");
         }
 
         return null;
@@ -103,8 +106,9 @@ public class MovieAPI {
         try (Response response = client.newCall(request).execute()) {
             return response.isSuccessful();
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println(MovieAPI.class + ": http status not ok");
         }
+        //throw new MovieAPIException();
         return false;
     }
 }

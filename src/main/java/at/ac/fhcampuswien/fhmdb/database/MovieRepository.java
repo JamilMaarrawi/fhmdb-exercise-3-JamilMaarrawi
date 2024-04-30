@@ -1,5 +1,6 @@
 package at.ac.fhcampuswien.fhmdb.database;
 
+import at.ac.fhcampuswien.fhmdb.exceptions.DatabaseException;
 import at.ac.fhcampuswien.fhmdb.models.Movie;
 import at.ac.fhcampuswien.fhmdb.models.MovieEntity;
 import com.j256.ormlite.dao.Dao;
@@ -14,8 +15,9 @@ public class MovieRepository {
         this.movieDao = DatabaseManager.getDatabaseManager().getMovieDao();
     }
 
-    public List<MovieEntity> getAllMovies() throws SQLException {
-        System.out.println(movieDao.queryForAll());
+    public List<MovieEntity> getAllMovies() throws SQLException, DatabaseException {
+        List<MovieEntity> movieEntities = movieDao.queryForAll();
+        if (movieEntities.isEmpty()) throw new DatabaseException(new RuntimeException());
         return movieDao.queryForAll();
     }
 

@@ -4,17 +4,21 @@ import at.ac.fhcampuswien.fhmdb.api.MovieAPI;
 import at.ac.fhcampuswien.fhmdb.database.DatabaseManager;
 import at.ac.fhcampuswien.fhmdb.database.MovieRepository;
 import at.ac.fhcampuswien.fhmdb.database.WatchlistRepository;
+import at.ac.fhcampuswien.fhmdb.exceptions.DatabaseException;
+import at.ac.fhcampuswien.fhmdb.exceptions.MovieAPIException;
 import at.ac.fhcampuswien.fhmdb.models.*;
 import at.ac.fhcampuswien.fhmdb.ui.MovieCell;
-import com.jfoenix.controls.JFXButton;
-import com.jfoenix.controls.JFXComboBox;
-import com.jfoenix.controls.JFXListView;
+import com.jfoenix.controls.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.Alert;
 import javafx.scene.control.TextField;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Text;
+import javafx.stage.Stage;
 
 import java.net.URL;
 import java.sql.SQLException;
@@ -47,6 +51,12 @@ public class HomeController implements Initializable {
     @FXML
     public JFXButton unFilterBtn;
 
+    @FXML
+    public JFXButton windowBtn;
+
+    @FXML
+    public VBox vBox;
+
     public List<Movie> allMovies;
 
     protected ObservableList<Movie> observableMovies = FXCollections.observableArrayList();
@@ -54,9 +64,6 @@ public class HomeController implements Initializable {
     protected SortedState sortedState;
 
     public WindowState windowState;
-
-    @FXML
-    public JFXButton windowBtn;
 
     private MovieRepository movieRepository;
     private WatchlistRepository watchlistRepository;
@@ -75,39 +82,57 @@ public class HomeController implements Initializable {
     }
 
     public void initializeState() throws SQLException {
-        if(MovieAPI.isRequestSuccessful()){
+        try {
+            //throw new MovieAPIException(new RuntimeException());
+            List<Movie> movies = MovieAPI.getAllMovies();
+            movieRepository.removeAll();
+            movieRepository.addAllMovies(movies);
+        } catch (MovieAPIException e) {
+            System.out.println(e.getMessage());
+            showMovieAPIError(e);
+        } finally {
+            try {
+                //throw new DatabaseException(new RuntimeException());
+                List<Movie> result = MovieEntity.toMovies(movieRepository.getAllMovies());
+                setMovies(result);
+                setMovieList(result);
+            } catch (DatabaseException e) {
+                System.out.println(e.getMessage());
+                showDatabaseError(e);
+            }
+        }
+        /*if(MovieAPI.isRequestSuccessful()) {
             movieRepository.removeAll();
             movieRepository.addAllMovies(MovieAPI.getAllMovies());
         }
-        //List<Movie> result = MovieAPI.getAllMovies();
         List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
         setMovies(result);
-        setMovieList(result);
-
-
-        //printMovie(result.get(0));
-        //printMovie(MovieEntity.toMovies(MovieEntity.fromMovies(result)).get(0));
+        setMovieList(result);*/
 
         sortedState = SortedState.NONE;
         windowState = WindowState.HOME;
 
         // test stream methods
-        System.out.println("getMostPopularActor");
-        System.out.println(getMostPopularActor(allMovies));
+        try {
+            System.out.println("getMostPopularActor");
+            System.out.println(getMostPopularActor(allMovies));
 
-        System.out.println("getLongestMovieTitle");
-        System.out.println(getLongestMovieTitle(allMovies));
+            System.out.println("getLongestMovieTitle");
+            System.out.println(getLongestMovieTitle(allMovies));
 
-        System.out.println("count movies from Zemeckis");
-        System.out.println(countMoviesFrom(allMovies, "Robert Zemeckis"));
+            System.out.println("count movies from Zemeckis");
+            System.out.println(countMoviesFrom(allMovies, "Robert Zemeckis"));
 
-        System.out.println("count movies from Steven Spielberg");
-        System.out.println(countMoviesFrom(allMovies, "Steven Spielberg"));
+            System.out.println("count movies from Steven Spielberg");
+            System.out.println(countMoviesFrom(allMovies, "Steven Spielberg"));
 
-        System.out.println("getMoviewsBetweenYears");
-        List<Movie> between = getMoviesBetweenYears(allMovies, 1994, 2000);
-        System.out.println(between.size());
-        System.out.println(between.stream().map(Objects::toString).collect(Collectors.joining(", ")));
+            System.out.println("getMoviewsBetweenYears");
+            List<Movie> between = getMoviesBetweenYears(allMovies, 1994, 2000);
+            System.out.println(between.size());
+            System.out.println(between.stream().map(Objects::toString).collect(Collectors.joining(", ")));
+        } catch (DatabaseException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     public void initializeLayout() {
@@ -287,14 +312,21 @@ public class HomeController implements Initializable {
             List<Movie> result =WatchlistMovieEntity.watchlistToMovies(watchlistRepository.getWatchlist());
             setMovies(result);
             setMovieList(result);
-            initializeLayout();
+            movieListView.setItems(observableMovies);
+            movieListView.setCellFactory(movieListView -> new MovieCell(onAddToWatchlistClicked,this));
         } else {
             windowState = WindowState.HOME;
             windowBtn.setText("Go to Watchlist");
-            List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
-            setMovies(result);
-            setMovieList(result);
-            initializeLayout();
+            try {
+                List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
+                setMovies(result);
+                setMovieList(result);
+            } catch (DatabaseException e) {
+                System.out.println(e.getMessage());
+                showDatabaseError(e);
+            }
+            movieListView.setItems(observableMovies);
+            movieListView.setCellFactory(movieListView -> new MovieCell(onAddToWatchlistClicked,this));
         }
     }
 
@@ -303,13 +335,27 @@ public class HomeController implements Initializable {
         genreComboBox.setValue(null);
         releaseYearComboBox.setValue(null);
         ratingFromComboBox.setValue(null);
-        List<Movie> result =MovieEntity.toMovies(movieRepository.getAllMovies());
-        setMovies(result);
-        setMovieList(result);
+        List<Movie> result;
+        if(windowState == WindowState.HOME) {
+            try {
+                result = MovieEntity.toMovies(movieRepository.getAllMovies());
+                setMovies(result);
+                setMovieList(result);
+            } catch (DatabaseException e) {
+                System.out.println(e.getMessage());
+                showDatabaseError(e);
+            }
+
+        } else {
+            result = WatchlistMovieEntity.watchlistToMovies(watchlistRepository.getWatchlist());
+            setMovies(result);
+            setMovieList(result);
+        }
     }
 
     // count which actor is in the most movies
-    public String getMostPopularActor(List<Movie> movies) {
+    public String getMostPopularActor(List<Movie> movies) throws DatabaseException {
+        if (movies == null || movies.isEmpty()) throw new DatabaseException();
         String actor = movies.stream()
                 .flatMap(movie -> movie.getMainCast().stream())
                 .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
@@ -322,36 +368,45 @@ public class HomeController implements Initializable {
         return actor;
     }
 
-    public int getLongestMovieTitle(List<Movie> movies) {
+    public int getLongestMovieTitle(List<Movie> movies) throws DatabaseException {
+        if (movies == null || movies.isEmpty()) throw new DatabaseException();
         return movies.stream()
                 .mapToInt(movie -> movie.getTitle().length())
                 .max()
                 .orElse(0);
     }
 
-    public long countMoviesFrom(List<Movie> movies, String director) {
+    public long countMoviesFrom(List<Movie> movies, String director) throws DatabaseException {
+        if (movies == null || movies.isEmpty()) throw new DatabaseException();
         return movies.stream()
                 .filter(movie -> movie.getDirectors().contains(director))
                 .count();
     }
 
-    public List<Movie> getMoviesBetweenYears(List<Movie> movies, int startYear, int endYear) {
+    public List<Movie> getMoviesBetweenYears(List<Movie> movies, int startYear, int endYear) throws DatabaseException {
+        if (movies == null || movies.isEmpty()) throw new DatabaseException();
         return movies.stream()
                 .filter(movie -> movie.getReleaseYear() >= startYear && movie.getReleaseYear() <= endYear)
                 .collect(Collectors.toList());
     }
 
-    public void printMovie(Movie m){
-        System.out.println(m.getId());
-        System.out.println(m.getTitle());
-        System.out.println(m.getDescription());
-        System.out.println(m.getGenres());
-        System.out.println(m.getReleaseYear());
-        System.out.println(m.getImgUrl());
-        System.out.println(m.getLengthInMinutes());
-        System.out.println(m.getDirectors());
-        System.out.println(m.getWriters());
-        System.out.println(m.getMainCast());
-        System.out.println(m.getRating());
+    private void showMovieAPIError(MovieAPIException e) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        Stage stage = (Stage) alert.getDialogPane().getScene().getWindow();
+        stage.setAlwaysOnTop(true);
+        alert.setTitle("Connection Error");
+        alert.setHeaderText(null);
+        alert.setContentText("Ooops, could not load movies!!!" + System.lineSeparator()
+                + System.lineSeparator() + "Loading Movies from last Time . . ." + System.lineSeparator()
+                + System.lineSeparator() + "Error: " + e.getCause());
+        alert.show();
+    }
+
+    private void showDatabaseError(DatabaseException e) {
+        Text text = new Text("Could not reach Database!!!" + System.lineSeparator() +
+                System.lineSeparator() + "Please try again later !!!" + System.lineSeparator() +
+                System.lineSeparator() + "Error: " + e.getCause());
+        text.getStyleClass().add("ErrorText");
+        vBox.getChildren().add(vBox.getChildren().size()-1,text );
     }
 }
